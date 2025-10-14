@@ -1,10 +1,9 @@
-# GridBNB-USDT依赖库 (适配Python 3.13.1)
 aiohttp>=3.9.1
 aiofiles>=23.2.1
 ccxt>=4.1.0
 numpy>=1.26.0
 python-dotenv>=1.0.0
-uvicorn>=0.25.0 # ASGI server, potentially needed for aiohttp
+uvicorn>=0.25.0
 requests>=2.31.0
 tenacity>=8.2.3
 psutil>=5.9.6
