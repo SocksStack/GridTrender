@@ -1,5 +1,6 @@
 import logging
 import math
+import time
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -63,12 +64,14 @@ class DerivativeTrendTrader(AbstractTrader):
         self.position_state = PositionState()
         self.market_info = None
         self.last_snapshot: Optional[IndicatorSnapshot] = None
+        self.start_time: Optional[float] = None
         self.logger = logging.getLogger(self.__class__.__name__)
 
     async def initialize(self) -> None:
         self.logger.info("初始化合约策略: %s", self.config.symbol)
         await self.exchange.load_markets()
         await self.exchange.ensure_contract_setup(self.config.symbol)
+        self.start_time = time.time()
         self.market_info = self.exchange.exchange.market(self.config.symbol)
         await self._sync_position_state()
 
