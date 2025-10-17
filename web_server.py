@@ -1359,6 +1359,7 @@ async def start_web_server(traders, derivative_traders=None):
 
     app.router.add_get('/api/symbols', handle_symbols)
     app.router.add_get('/api/derivatives/status', handle_derivative_status)
+    app.router.add_get('/dashboard', handle_unified_dashboard)
     app.router.add_get('/api/derivatives/symbols', handle_derivative_symbols)
     app.router.add_get('/derivatives', handle_derivative_dashboard)
 
@@ -1592,6 +1593,120 @@ async def handle_derivative_dashboard(request):
         });
 
         setInterval(updateStatus, 5000);
+        loadSymbols();
+    </script>
+</body>
+</html>"""
+    return web.Response(text=html, content_type='text/html')
+
+@auth_required
+async def handle_unified_dashboard(request):
+    html = """<!DOCTYPE html>
+<html lang='en'>
+<head>
+    <meta charset='utf-8'>
+    <title>Unified Strategy Dashboard</title>
+    <link href='https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css' rel='stylesheet'>
+</head>
+<body class='bg-gray-50'>
+    <div class='container mx-auto px-4 py-8'>
+        <div class='flex flex-col md:flex-row md:items-center md:justify-between gap-4'>
+            <h1 class='text-2xl font-bold'>Unified Strategy Dashboard</h1>
+        </div>
+
+        <div class='grid grid-cols-1 md:grid-cols-2 gap-6 mt-6'>
+            <!-- Spot Panel -->
+            <div class='bg-white shadow rounded p-4'>
+                <div class='flex items-center gap-3 mb-4'>
+                    <h2 class='text-lg font-semibold'>Spot</h2>
+                    <select id='spot-symbol' class='p-2 border rounded bg-white'></select>
+                </div>
+                <div class='grid grid-cols-1 gap-3'>
+                    <div class='p-3 rounded border'>
+                        <p>Price: <span id='s-price'>--</span></p>
+                        <p>Grid Size: <span id='s-grid'>--</span></p>
+                        <p>Position %: <span id='s-pos'>--</span></p>
+                    </div>
+                    <div class='p-3 rounded border'>
+                        <p>Upper Band: <span id='s-up'>--</span></p>
+                        <p>Lower Band: <span id='s-low'>--</span></p>
+                        <p>Uptime: <span id='s-uptime'>--</span></p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Derivative Panel -->
+            <div class='bg-white shadow rounded p-4'>
+                <div class='flex items-center gap-3 mb-4'>
+                    <h2 class='text-lg font-semibold'>Derivatives</h2>
+                    <select id='deriv-symbol' class='p-2 border rounded bg-white'></select>
+                </div>
+                <div class='grid grid-cols-1 gap-3'>
+                    <div class='p-3 rounded border'>
+                        <p>Price: <span id='d-price'>--</span></p>
+                        <p>Trend: <span id='d-trend'>--</span></p>
+                        <p>ADX / ATR: <span id='d-adx'>--</span> / <span id='d-atr'>--</span></p>
+                    </div>
+                    <div class='p-3 rounded border'>
+                        <p>Side / Size: <span id='d-side'>--</span> / <span id='d-size'>--</span></p>
+                        <p>Unrealized PnL: <span id='d-pnl'>--</span></p>
+                        <p>Funding: <span id='d-funding'>--</span> | Next: <span id='d-next'>--</span></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const spotSel = document.getElementById('spot-symbol');
+        const derivSel = document.getElementById('deriv-symbol');
+        let spotSymbol = null;
+        let derivSymbol = null;
+
+        function fmt(v, d=2){ return (v===null||v===undefined)?'--':Number(v).toFixed(d); }
+
+        async function loadSymbols(){
+            const resp = await fetch('/api/symbols');
+            const data = await resp.json();
+            const spot = data.symbols || [];
+            const deriv = data.derivative_symbols || [];
+            spotSel.innerHTML = spot.map(s=>`<option value="${s}">${s}</option>`).join('');
+            derivSel.innerHTML = deriv.map(s=>`<option value="${s}">${s}</option>`).join('');
+            if(spot.length){ spotSymbol = spot[0]; spotSel.value = spotSymbol; await updateSpot(); }
+            if(deriv.length){ derivSymbol = deriv[0]; derivSel.value = derivSymbol; await updateDeriv(); }
+        }
+
+        async function updateSpot(){
+            if(!spotSymbol) return;
+            const r = await fetch(`/api/status?symbol=${spotSymbol}`);
+            const d = await r.json(); if(d.error) return;
+            document.getElementById('s-price').textContent = fmt(d.current_price);
+            document.getElementById('s-grid').textContent = d.grid_size ? `${(d.grid_size*100).toFixed(2)}%` : '--';
+            document.getElementById('s-pos').textContent = d.position_percentage!=null ? `${d.position_percentage.toFixed(2)}%` : '--';
+            document.getElementById('s-up').textContent = d.grid_upper_band!=null ? fmt(d.grid_upper_band) : '--';
+            document.getElementById('s-low').textContent = d.grid_lower_band!=null ? fmt(d.grid_lower_band) : '--';
+            document.getElementById('s-uptime').textContent = d.uptime || '--';
+        }
+
+        async function updateDeriv(){
+            if(!derivSymbol) return;
+            const r = await fetch(`/api/derivatives/status?symbol=${derivSymbol}`);
+            const d = await r.json(); if(d.error) return;
+            document.getElementById('d-price').textContent = fmt(d.current_price);
+            document.getElementById('d-trend').textContent = d.trend_direction || '--';
+            document.getElementById('d-adx').textContent = fmt(d.adx);
+            document.getElementById('d-atr').textContent = fmt(d.atr);
+            document.getElementById('d-side').textContent = d.position_side || '--';
+            document.getElementById('d-size').textContent = fmt(d.position_size, 4);
+            document.getElementById('d-pnl').textContent = fmt(d.unrealized_pnl);
+            document.getElementById('d-funding').textContent = fmt(d.funding_rate, 6);
+            document.getElementById('d-next').textContent = d.next_funding_time || '--';
+        }
+
+        spotSel.addEventListener('change', async (e)=>{ spotSymbol = e.target.value; await updateSpot();});
+        derivSel.addEventListener('change', async (e)=>{ derivSymbol = e.target.value; await updateDeriv();});
+        setInterval(updateSpot, 5000);
+        setInterval(updateDeriv, 5000);
         loadSymbols();
     </script>
 </body>
