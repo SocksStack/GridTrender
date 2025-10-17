@@ -46,6 +46,15 @@ class Settings(BaseSettings):
     DYNAMIC_INTERVAL_PARAMS_JSON: Dict = {}
     ENABLE_VOLUME_WEIGHTING: bool = True
 
+    # --- 衍生品策略配置 ---
+    DERIVATIVE_SYMBOLS: str = ""
+    DERIVATIVE_DEFAULT_LEVERAGE: float = 3.0
+    DERIVATIVE_MARGIN_MODE: str = "cross"
+    DERIVATIVE_DEFAULT_SETTLE: str = "USDT"
+    DERIVATIVE_CONTRACT_MULTIPLIER: float = 1.0
+    DERIVATIVE_STRATEGY_JSON: Dict[str, Dict] = {}
+    DERIVATIVE_RISK_LIMITS_JSON: Dict[str, Dict] = {}
+
     @field_validator('INITIAL_PARAMS_JSON', mode='before')
     @classmethod
     def parse_initial_params(cls, value):
@@ -66,6 +75,16 @@ class Settings(BaseSettings):
                 return json.loads(value)
             except json.JSONDecodeError:
                 raise ValueError(f"策略参数格式无效，必须是合法的JSON字符串。收到的值: {value}")
+        return value if value else {}
+
+    @field_validator('DERIVATIVE_STRATEGY_JSON', 'DERIVATIVE_RISK_LIMITS_JSON', mode='before')
+    @classmethod
+    def parse_derivative_json(cls, value):
+        if isinstance(value, str) and value:
+            try:
+                return json.loads(value)
+            except json.JSONDecodeError:
+                raise ValueError("DERIVATIVE_* 配置必须是合法 JSON 字符串")
         return value if value else {}
 
     @field_validator('SAVINGS_PRECISIONS', mode='before')
@@ -116,6 +135,7 @@ settings = Settings()
 
 # 提供一个解析后的列表，方便使用
 SYMBOLS_LIST = [s.strip() for s in settings.SYMBOLS.split(',') if s.strip()]
+DERIVATIVE_SYMBOLS_LIST = [s.strip() for s in settings.DERIVATIVE_SYMBOLS.split(',') if s.strip()]
 
 # 保留必要的向后兼容性常量，但建议逐步迁移到 settings.XXX 的形式
 FLIP_THRESHOLD = lambda grid_size: (grid_size / 5) / 100  # 网格大小的1/5的1%
@@ -205,3 +225,11 @@ class TradingConfig:
 
     # Removed unused validate_config method
 # End of class definition 
+
+
+def get_derivative_strategy_overrides(symbol: str) -> Dict:
+    return settings.DERIVATIVE_STRATEGY_JSON.get(symbol, {})
+
+
+def get_derivative_risk_overrides(symbol: str) -> Dict:
+    return settings.DERIVATIVE_RISK_LIMITS_JSON.get(symbol, {})
